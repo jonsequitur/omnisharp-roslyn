@@ -3,7 +3,6 @@ using System.Composition.Hosting;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -91,10 +90,12 @@ namespace OmniSharp.LanguageServerProtocol
 
             var eventEmitter = new LanguageServerEventEmitter(_server);
             var plugins = _application.CreatePluginAssemblies();
+
+            var assemblyLoader = _serviceProvider.GetRequiredService<IAssemblyLoader>();
             var compositionHostBuilder = new CompositionHostBuilder(_serviceProvider, _environment, eventEmitter)
                 .WithOmniSharpAssemblies()
                 .WithAssemblies(typeof(LanguageServerHost).Assembly)
-                .WithAssemblies(plugins.AssemblyNames.Select(Assembly.Load).ToArray());
+                .WithAssemblies(assemblyLoader.LoadByAssemblyNameOrPath(plugins.AssemblyNames).ToArray());
 
             _compositionHost = compositionHostBuilder.Build();
 
@@ -155,6 +156,7 @@ namespace OmniSharp.LanguageServerProtocol
             _server.AddHandlers(CompletionHandler.Enumerate(_handlers));
             _server.AddHandlers(SignatureHelpHandler.Enumerate(_handlers));
             _server.AddHandlers(RenameHandler.Enumerate(_handlers));
+            _server.AddHandlers(DocumentSymbolHandler.Enumerate(_handlers));
 
             _server.LogMessage(new LogMessageParams()
             {
