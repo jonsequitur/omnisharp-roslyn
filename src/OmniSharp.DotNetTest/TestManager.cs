@@ -24,7 +24,7 @@ namespace OmniSharp.DotNetTest
     internal abstract class TestManager : DisposableObject
     {
         protected readonly Project Project;
-        protected readonly DotNetCliService DotNetCli;
+        protected readonly IDotNetCliService DotNetCli;
         protected readonly SemanticVersion DotNetCliVersion;
         protected readonly IEventEmitter EventEmitter;
         protected readonly ILogger Logger;
@@ -41,7 +41,7 @@ namespace OmniSharp.DotNetTest
 
         public bool IsConnected => _isConnected;
 
-        protected TestManager(Project project, string workingDirectory, DotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILogger logger)
+        protected TestManager(Project project, string workingDirectory, IDotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILogger logger)
         {
             Project = project ?? throw new ArgumentNullException(nameof(project));
             WorkingDirectory = workingDirectory ?? throw new ArgumentNullException(nameof(workingDirectory));
@@ -51,14 +51,14 @@ namespace OmniSharp.DotNetTest
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public static TestManager Start(Project project, DotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        public static TestManager Start(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
         {
             var manager = Create(project, dotNetCli, eventEmitter, loggerFactory);
             manager.Connect();
             return manager;
         }
 
-        public static TestManager Create(Project project, DotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        public static TestManager Create(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
         {
             var workingDirectory = Path.GetDirectoryName(project.FilePath);
 
@@ -73,9 +73,21 @@ namespace OmniSharp.DotNetTest
         protected abstract void VersionCheck();
 
         public abstract RunTestResponse RunTest(string methodName, string testFrameworkName, string targetFrameworkVersion);
+
+        public virtual RunTestResponse RunTest(string[] methodNames, string testFrameworkName, string targetFrameworkVersion)
+        { 
+                throw new NotImplementedException();
+        }
+
         public abstract GetTestStartInfoResponse GetTestStartInfo(string methodName, string testFrameworkName, string targetFrameworkVersion);
 
         public abstract Task<DebugTestGetStartInfoResponse> DebugGetStartInfoAsync(string methodName, string testFrameworkName, string targetFrameworkVersion, CancellationToken cancellationToken);
+
+        public virtual Task<DebugTestGetStartInfoResponse> DebugGetStartInfoAsync(string[] methodNames, string testFrameworkName, string targetFrameworkVersion, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
         public abstract Task DebugLaunchAsync(CancellationToken cancellationToken);
 
         protected virtual bool PrepareToConnect()

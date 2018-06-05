@@ -21,7 +21,7 @@ namespace OmniSharp.DotNetTest
 {
     internal class VSTestManager : TestManager
     {
-        public VSTestManager(Project project, string workingDirectory, DotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        public VSTestManager(Project project, string workingDirectory, IDotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
             : base(project, workingDirectory, dotNetCli, dotNetCliVersion, eventEmitter, loggerFactory.CreateLogger<VSTestManager>())
         {
         }
@@ -105,7 +105,7 @@ namespace OmniSharp.DotNetTest
         {
             VerifyTestFramework(testFrameworkName);
 
-            var testCases = DiscoverTests(methodName, targetFrameworkVersion);
+            var testCases = DiscoverTests(new string[] { methodName }, targetFrameworkVersion);
 
             SendMessage(MessageType.GetTestRunnerProcessStartInfoForRunSelected,
                 new
@@ -127,10 +127,13 @@ namespace OmniSharp.DotNetTest
         }
 
         public override async Task<DebugTestGetStartInfoResponse> DebugGetStartInfoAsync(string methodName, string testFrameworkName, string targetFrameworkVersion, CancellationToken cancellationToken)
+         => await DebugGetStartInfoAsync(new string[] { methodName }, testFrameworkName, targetFrameworkVersion, cancellationToken);
+
+        public override async Task<DebugTestGetStartInfoResponse> DebugGetStartInfoAsync(string[] methodNames, string testFrameworkName, string targetFrameworkVersion, CancellationToken cancellationToken)
         {
             VerifyTestFramework(testFrameworkName);
 
-            var testCases = await DiscoverTestsAsync(methodName, targetFrameworkVersion, cancellationToken);
+            var testCases = await DiscoverTestsAsync(methodNames, targetFrameworkVersion, cancellationToken);
 
             SendMessage(MessageType.GetTestRunnerProcessStartInfoForRunSelected,
                 new
@@ -184,10 +187,13 @@ namespace OmniSharp.DotNetTest
         }
 
         public override RunTestResponse RunTest(string methodName, string testFrameworkName, string targetFrameworkVersion)
+            => RunTest(new string[] { methodName }, testFrameworkName, targetFrameworkVersion);
+
+        public override RunTestResponse RunTest(string[] methodNames, string testFrameworkName, string targetFrameworkVersion)
         {
             VerifyTestFramework(testFrameworkName);
 
-            var testCases = DiscoverTests(methodName, targetFrameworkVersion);
+            var testCases = DiscoverTests(methodNames, targetFrameworkVersion);
 
             var testResults = new List<TestResult>();
 
@@ -234,7 +240,12 @@ namespace OmniSharp.DotNetTest
                     MethodName = testResult.TestCase.FullyQualifiedName,
                     Outcome = testResult.Outcome.ToString().ToLowerInvariant(),
                     ErrorMessage = testResult.ErrorMessage,
-                    ErrorStackTrace = testResult.ErrorStackTrace
+                    ErrorStackTrace = testResult.ErrorStackTrace,
+                    StandardOutput = testResult.Messages
+                                    .Where(message => message.Category == TestResultMessage.StandardOutCategory)
+                                    .Select(message => message.Text).ToArray(),
+                    StandardError = testResult.Messages.Where(message => message.Category == TestResultMessage.StandardErrorCategory)
+                    .Select(message => message.Text).ToArray()
                 });
 
             return new RunTestResponse
@@ -244,7 +255,7 @@ namespace OmniSharp.DotNetTest
             };
         }
 
-        private async Task<TestCase[]> DiscoverTestsAsync(string methodName, string targetFrameworkVersion, CancellationToken cancellationToken)
+        private async Task<TestCase[]> DiscoverTestsAsync(string[] methodNames, string targetFrameworkVersion, CancellationToken cancellationToken)
         {
             SendMessage(MessageType.StartDiscovery,
                 new
@@ -258,6 +269,7 @@ namespace OmniSharp.DotNetTest
 
             var testCases = new List<TestCase>();
             var done = false;
+            var hashset = new HashSet<string>(methodNames);
 
             while (!done)
             {
@@ -286,7 +298,7 @@ namespace OmniSharp.DotNetTest
 
                             testName = testName.Trim();
 
-                            if (testName.Equals(methodName, StringComparison.Ordinal))
+                            if (hashset.Contains(testName, StringComparer.Ordinal))
                             {
                                 testCases.Add(testCase);
                             }
@@ -303,9 +315,9 @@ namespace OmniSharp.DotNetTest
             return testCases.ToArray();
         }
 
-        private TestCase[] DiscoverTests(string methodName, string targetFrameworkVersion)
+        private TestCase[] DiscoverTests(string[] methodNames, string targetFrameworkVersion)
         {
-            return DiscoverTestsAsync(methodName, targetFrameworkVersion, CancellationToken.None).Result;
+            return DiscoverTestsAsync(methodNames, targetFrameworkVersion, CancellationToken.None).Result;
         }
     }
 }

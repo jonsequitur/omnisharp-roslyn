@@ -13,8 +13,8 @@ namespace OmniSharp.Roslyn.CSharp.Tests
 {
     public class GoToDefinitionFacts : AbstractSingleRequestHandlerTestFixture<GotoDefinitionService>
     {
-        public GoToDefinitionFacts(ITestOutputHelper output)
-            : base(output)
+        public GoToDefinitionFacts(ITestOutputHelper output, SharedOmniSharpHostFixture sharedOmniSharpHostFixture)
+            : base(output, sharedOmniSharpHostFixture)
         {
         }
 
@@ -30,6 +30,110 @@ class {|def:Foo|} {
 
             await TestGoToSourceAsync(testFile);
         }
+
+        [Fact]
+        public async Task DoesNotReturnOnPropertAccessorGet()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+    public string Foo{ g$$et; set; }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task DoesNotReturnOnPropertAccessorSet()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+    public int Foo{ get; s$$et; }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task DoesNotReturnOnPropertyAccessorPropertyDef()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+    public int |def:Foo| Fo$$o{ get; set; }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task ReturnsOnPropertyAccessorPropertySetting()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+    public int |def:Foo|{ get; set; }
+
+    public static void main()
+    {
+        F$$oo = 3;
+    }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task ReturnsOnPropertyAccessorField1()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+
+    public int |def:foo|;
+
+    public int Foo
+    {
+        get => f$$oo;
+        set => foo = value;
+    }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task ReturnsOnPropertyAccessorField2()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+
+    public int |def:foo|;
+
+    public int Foo
+    {
+        get => foo;
+        set => f$$oo = value;
+    }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+        [Fact]
+        public async Task ReturnsOnPropertyAccessorPropertyGetting()
+        {
+            var testFile = new TestFile("foo.cs", @"
+class Test {
+    public int |def:Foo|{ get; set; }
+
+    public static void main()
+    {
+        Foo = 3;
+    Console.WriteLine(F$$oo);
+    }
+}");
+
+            await TestGoToSourceAsync(testFile);
+        }
+
+
 
         [Theory]
         [InlineData("bar.cs")]
@@ -277,23 +381,21 @@ class Bar {
 
         private async Task<GotoDefinitionResponse> GetResponseAsync(TestFile[] testFiles, bool wantMetadata)
         {
-            using (var host = CreateOmniSharpHost(testFiles))
+            SharedOmniSharpTestHost.AddFilesToWorkspace(testFiles);
+            var source = testFiles.Single(tf => tf.Content.HasPosition);
+            var point = source.Content.GetPointFromPosition();
+
+            var request = new GotoDefinitionRequest
             {
-                var source = testFiles.Single(tf => tf.Content.HasPosition);
-                var point = source.Content.GetPointFromPosition();
+                FileName = source.FileName,
+                Line = point.Line,
+                Column = point.Offset,
+                Timeout = 60000,
+                WantMetadata = wantMetadata
+            };
 
-                var request = new GotoDefinitionRequest
-                {
-                    FileName = source.FileName,
-                    Line = point.Line,
-                    Column = point.Offset,
-                    Timeout = 60000,
-                    WantMetadata = wantMetadata
-                };
-
-                var requestHandler = GetRequestHandler(host);
-                return await requestHandler.Handle(request);
-            }
+            var requestHandler = GetRequestHandler(SharedOmniSharpTestHost);
+            return await requestHandler.Handle(request);
         }
     }
 }
